@@ -37,6 +37,7 @@ export type ShoplineLineItem = {
 };
 
 export type ShoplineOrder = {
+  [key: string]: unknown;
   id?: string | number;
   name?: string;
   order_number?: string | number;

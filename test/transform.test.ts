@@ -77,4 +77,34 @@ describe("buildShipcoOrder", () => {
     expect(result.order.to_address.city).toBe("Los Angeles");
     expect(result.order.products[0].quantity).toBe(2);
   });
+
+  it("copies the China unified social credit code to Ship&Co consignee tax id", () => {
+    const result = buildShipcoOrder(
+      {
+        id: "SL-CN-1",
+        financial_status: "paid",
+        shipping_address: {
+          name: "Li Wei",
+          company: "Shanghai Sample Trading Co Ltd",
+          country_code: "CN",
+          province: "Shanghai",
+          city: "Shanghai",
+          address1: "100 Century Avenue",
+          zip: "200120",
+          phone: "+8613800138000"
+        },
+        custom_attributes: [
+          {
+            name: "Please enter your company number / unified social",
+            value: "91310000625910362F"
+          }
+        ],
+        line_items: [{ name: "Sample item", quantity: 1, price: 1000 }]
+      },
+      runtime
+    );
+
+    expect(result.order.to_address.country).toBe("CN");
+    expect(result.order.setup.consignee_tax_id).toBe("91310000625910362F");
+  });
 });

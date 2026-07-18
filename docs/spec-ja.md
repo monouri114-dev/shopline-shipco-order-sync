@@ -21,7 +21,7 @@ Shoplineで支払い完了になった注文を、CSV手動アップロードで
   - `setup.carrier`
   - `setup.service`
   - `setup.currency`
-  - `setup.warehouse_id`
+  - `setup.warehouse_id` 任意。未設定時はShip&Coアプリ側のデフォルト倉庫を使用する。
   - `setup.ref_number`
   - `setup.delivery_note`
 
@@ -35,6 +35,15 @@ Shoplineで支払い完了になった注文を、CSV手動アップロードで
 - 海外住所は `address1 + address2` を分割し、`city` は別フィールドに保持する。
 - 住所が3フィールドに収まらない場合、残りの原文を `setup.delivery_note` に保存する。
 - 変更が発生した項目はレスポンスの `warnings` に返す。
+
+## 中国向け会社番号・統一社会信用コード
+
+Shoplineのチェックアウト追加項目 `Please enter your company number / unified social` に入力された値は、中国配送時のみShip&Coの `setup.consignee_tax_id` に送信する。
+
+- 対象配送先国: `CN`
+- Ship&Co送信先: `setup.consignee_tax_id`
+- 目的: 中国向け国際配送の受取人/輸入者Tax IDとして保持する。
+- ShoplineのWebhook payload上のフィールド名が多少変わっても拾えるように、`custom_attributes`、`additional_fields`、`note` などの注文データ内から該当ラベルを探索する。
 
 ## 重複登録防止
 

@@ -27,7 +27,24 @@ function chooseAddress(order: ShoplineOrder): ShoplineAddress {
 }
 
 function countryCode(address: ShoplineAddress, runtime: RuntimeConfig) {
-  return normalizeText(address.country_code || address.country || runtime.shipco.defaultCountry).toUpperCase();
+  const raw = normalizeText(address.country_code || address.country || runtime.shipco.defaultCountry).toUpperCase();
+  const aliases: Record<string, string> = {
+    CHINA: "CN",
+    "MAINLAND CHINA": "CN",
+    "PEOPLE'S REPUBLIC OF CHINA": "CN",
+    "PEOPLES REPUBLIC OF CHINA": "CN",
+    PRC: "CN",
+    JAPAN: "JP",
+    "UNITED STATES": "US",
+    USA: "US",
+    "UNITED KINGDOM": "GB",
+    UK: "GB"
+  };
+  return aliases[raw] || raw;
+}
+
+function isChinaDestination(country: string) {
+  return ["CN", "CHN", "CHINA"].includes(normalizeText(country).toUpperCase());
 }
 
 function provinceValue(address: ShoplineAddress, country: string) {
@@ -218,6 +235,104 @@ function orderRef(order: ShoplineOrder) {
   return normalizeText(order.name || order.order_number || order.id || "Shopline order");
 }
 
+const taxIdFieldPatterns = [
+  /company\s*number/i,
+  /unified\s*social/i,
+  /social\s*credit/i,
+  /uscc/i,
+  /usci/i,
+  /tax\s*id/i,
+  /vat/i,
+  /eori/i,
+  /統一社会信用/,
+  /统一社会信用/,
+  /会社番号/,
+  /企業番号/
+];
+
+const labelKeys = ["name", "label", "title", "key", "field", "field_name", "question"];
+const valueKeys = ["value", "answer", "text", "content", "input", "field_value", "fieldValue"];
+
+function taxIdFieldNameMatches(value: unknown) {
+  const text = normalizeText(value);
+  return Boolean(text && taxIdFieldPatterns.some((pattern) => pattern.test(text)));
+}
+
+function primitiveString(value: unknown) {
+  if (["string", "number"].includes(typeof value)) return normalizeText(value);
+  return "";
+}
+
+function valueFromLabeledObject(record: Record<string, unknown>) {
+  const hasMatchingLabel = labelKeys.some((key) => taxIdFieldNameMatches(record[key]));
+  if (!hasMatchingLabel) return "";
+
+  for (const key of valueKeys) {
+    const value = primitiveString(record[key]);
+    if (value) return value;
+  }
+
+  return "";
+}
+
+function valueFromNote(note: unknown) {
+  const text = normalizeText(note);
+  if (!text) return "";
+
+  const patterns = [
+    /(?:company\s*number|unified\s*social|social\s*credit|uscc|usci|tax\s*id)\s*[:：]\s*([A-Z0-9][A-Z0-9 -]{5,40})/i,
+    /(?:統一社会信用|统一社会信用|会社番号|企業番号)\s*[:：]\s*([A-Z0-9][A-Z0-9 -]{5,40})/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return normalizeText(match[1]).replace(/\s+/g, "");
+  }
+
+  return "";
+}
+
+function findCustomFieldValue(value: unknown, depth = 0, seen = new Set<unknown>()): string {
+  if (!value || depth > 8 || seen.has(value)) return "";
+
+  if (Array.isArray(value)) {
+    seen.add(value);
+    for (const item of value) {
+      const found = findCustomFieldValue(item, depth + 1, seen);
+      if (found) return found;
+    }
+    return "";
+  }
+
+  if (typeof value !== "object") return "";
+
+  seen.add(value);
+  const record = value as Record<string, unknown>;
+  const labeledValue = valueFromLabeledObject(record);
+  if (labeledValue) return labeledValue;
+
+  for (const [key, child] of Object.entries(record)) {
+    if (taxIdFieldNameMatches(key)) {
+      const directValue = primitiveString(child);
+      if (directValue) return directValue;
+
+      const nestedValue = findCustomFieldValue(child, depth + 1, seen);
+      if (nestedValue) return nestedValue;
+    }
+  }
+
+  for (const child of Object.values(record)) {
+    const found = findCustomFieldValue(child, depth + 1, seen);
+    if (found) return found;
+  }
+
+  return "";
+}
+
+function consigneeTaxId(order: ShoplineOrder) {
+  return valueFromNote(order.note) || findCustomFieldValue(order);
+}
+
 export function buildShipcoOrder(
   order: ShoplineOrder,
   runtime: RuntimeConfig = config
@@ -258,6 +373,11 @@ export function buildShipcoOrder(
     pack_size: runtime.shipco.defaultPackSize,
     pack_amount: runtime.shipco.defaultPackAmount
   };
+
+  const taxId = consigneeTaxId(order);
+  if (taxId && isChinaDestination(toAddress.country)) {
+    setup.consignee_tax_id = taxId;
+  }
 
   Object.keys(setup).forEach((key) => {
     if (setup[key] === undefined || setup[key] === "") delete setup[key];
