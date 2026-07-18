@@ -33,7 +33,23 @@ export type ShoplineLineItem = {
   requires_shipping?: boolean;
   origin_country?: string;
   hs_code?: string;
+  harmonized_system_code?: string;
   hs_description?: string;
+  price_set?: {
+    presentment_money?: {
+      amount?: string | number;
+    };
+  };
+};
+
+export type ShoplineAttribute = {
+  name?: string;
+  key?: string;
+  label?: string;
+  title?: string;
+  value?: unknown;
+  text?: unknown;
+  val?: unknown;
 };
 
 export type ShoplineOrder = {
@@ -44,6 +60,7 @@ export type ShoplineOrder = {
   email?: string;
   phone?: string;
   note?: string;
+  contact_email?: string;
   currency?: string;
   financial_status?: string;
   pay_status?: string;
@@ -60,8 +77,16 @@ export type ShoplineOrder = {
   line_items?: ShoplineLineItem[];
   shipping_lines?: Array<{
     title?: string;
+    code?: string;
     price?: string | number;
+    shipping_price?: string | number;
   }>;
+  note_attributes?: ShoplineAttribute[];
+  custom_attributes?: ShoplineAttribute[];
+  attributes?: ShoplineAttribute[];
+  order_attributes?: ShoplineAttribute[];
+  _pureShippingFee?: string | number;
+  _vatId?: string;
 };
 
 export type ShipcoAddress = {

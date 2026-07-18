@@ -154,7 +154,7 @@ function buildAddress(order: ShoplineOrder, runtime: RuntimeConfig, warnings: Tr
     email: normalizeText(order.email || address.email || order.customer?.email) || undefined,
     phone: normalizeText(address.phone || order.phone || order.customer?.phone) || undefined,
     country,
-    zip: normalizeText(address.zip) || undefined,
+    zip: country === "HK" ? runtime.shipco.hongKongPostalCode : normalizeText(address.zip) || undefined,
     province: provinceValue(address, country) || undefined,
     city: country === "JP" ? undefined : limitedCity.value || undefined,
     address1: splitAddress.parts[0] || "Address missing",
@@ -167,6 +167,41 @@ function buildAddress(order: ShoplineOrder, runtime: RuntimeConfig, warnings: Tr
   }
 
   return { toAddress, addressOverflow: splitAddress.overflow };
+}
+
+function orderShippingMethod(order: ShoplineOrder) {
+  const shippingLine = order.shipping_lines?.[0];
+  return compactJoin([shippingLine?.title, shippingLine?.code], " ");
+}
+
+function carrierFromShippingMethod(order: ShoplineOrder, runtime: RuntimeConfig) {
+  const method = orderShippingMethod(order).toLowerCase();
+  if (!method) return { carrier: runtime.shipco.carrier, service: runtime.shipco.service || undefined };
+
+  if (method.includes("dhl")) return { carrier: "dhl", service: undefined };
+  if (method.includes("fedex") || method.includes("fed ex")) {
+    return { carrier: "fedex", service: undefined };
+  }
+  if (method.includes("ups")) return { carrier: "ups", service: undefined };
+  if (method.includes("ems")) return { carrier: "japanpost", service: "japanpost_ems" };
+  if (method.includes("japan post") || method.includes("japanpost")) {
+    return { carrier: "japanpost", service: undefined };
+  }
+  if (method.includes("sagawa")) return { carrier: "sagawa", service: undefined };
+  if (method.includes("yamato") || method.includes("kuroneko")) {
+    return { carrier: "yamato", service: runtime.shipco.service || undefined };
+  }
+
+  return { carrier: runtime.shipco.carrier, service: runtime.shipco.service || undefined };
+}
+
+function shippingFee(order: ShoplineOrder, country: string) {
+  if (order._pureShippingFee !== undefined) return numeric(order._pureShippingFee);
+  if (country === "US") return undefined;
+
+  const shippingLine = order.shipping_lines?.[0];
+  const fee = numeric(shippingLine?.price ?? shippingLine?.shipping_price);
+  return fee > 0 ? fee : undefined;
 }
 
 function convertWeightToGrams(item: ShoplineLineItem) {
@@ -188,8 +223,24 @@ function convertWeightToGrams(item: ShoplineLineItem) {
   }
 }
 
+const hsDescriptionMap: Record<string, string> = {
+  "9504400000": "Trading cards",
+  "9504.40.0000": "Trading cards",
+  "9503000090": "Toys and scale models",
+  "9502100000": "Dolls and figures",
+  "9503000000": "Toys",
+  "9504300000": "Games"
+};
+
+function hsDescription(item: ShoplineLineItem, hsCode: string) {
+  return normalizeText(item.hs_description) || hsDescriptionMap[hsCode] || (hsCode ? "Trading cards" : "");
+}
+
 function buildProduct(item: ShoplineLineItem, runtime: RuntimeConfig, warnings: TransformWarning[]) {
-  const rawName = normalizeText(item.name || item.title || item.sku) || "Item";
+  const rawName =
+    normalizeText(runtime.shipco.defaultProductName) ||
+    normalizeText(item.name || item.title || item.sku) ||
+    "Item";
   const limitedName = limitText(rawName, runtime.limits.productName);
   appendWarning(
     warnings,
@@ -202,14 +253,16 @@ function buildProduct(item: ShoplineLineItem, runtime: RuntimeConfig, warnings: 
   const product: ShipcoProduct = {
     name: limitedName.value,
     quantity: positiveInteger(item.quantity ?? item.fulfillable_quantity, 1),
-    price: numeric(item.price, 0)
+    price: numeric(item.price_set?.presentment_money?.amount ?? item.price, 0)
   };
 
   const weight = convertWeightToGrams(item);
   if (weight !== undefined && weight > 0) product.weight = Math.round(weight);
   if (item.origin_country) product.origin_country = normalizeText(item.origin_country).toUpperCase();
-  if (item.hs_code) product.hs_code = normalizeText(item.hs_code);
-  if (item.hs_description) product.hs_description = normalizeText(item.hs_description);
+  const hsCode = normalizeText(item.harmonized_system_code || item.hs_code);
+  if (hsCode) product.hs_code = hsCode;
+  const hsDesc = hsDescription(item, hsCode);
+  if (hsDesc) product.hs_description = hsDesc;
 
   return product;
 }
@@ -330,7 +383,7 @@ function findCustomFieldValue(value: unknown, depth = 0, seen = new Set<unknown>
 }
 
 function consigneeTaxId(order: ShoplineOrder) {
-  return valueFromNote(order.note) || findCustomFieldValue(order);
+  return normalizeText(order._vatId) || valueFromNote(order.note) || findCustomFieldValue(order);
 }
 
 export function buildShipcoOrder(
@@ -353,17 +406,25 @@ export function buildShipcoOrder(
   const deliveryNote = buildDeliveryNote(
     {
       ...order,
-      note: compactJoin([order.note, addressOverflow ? `Address overflow: ${addressOverflow}` : ""], " / ")
+      note: compactJoin(
+        [
+          order.note,
+          orderShippingMethod(order) ? `Shipping method: ${orderShippingMethod(order)}` : "",
+          addressOverflow ? `Address overflow: ${addressOverflow}` : ""
+        ],
+        " / "
+      )
     },
     noteWarnings,
     runtime
   );
 
   warnings.splice(0, warnings.length, ...noteWarnings);
+  const shippingSetup = carrierFromShippingMethod(order, runtime);
 
   const setup: ShipcoOrderRequest["setup"] = {
-    carrier: runtime.shipco.carrier,
-    service: runtime.shipco.service || undefined,
+    carrier: shippingSetup.carrier,
+    service: shippingSetup.service,
     currency: normalizeText(order.currency || runtime.shipco.currency) || runtime.shipco.currency,
     warehouse_id: runtime.shipco.warehouseId || undefined,
     ref_number: orderRef(order),
@@ -374,8 +435,11 @@ export function buildShipcoOrder(
     pack_amount: runtime.shipco.defaultPackAmount
   };
 
+  const fee = shippingFee(order, toAddress.country);
+  if (fee !== undefined) setup.shipping_fee = fee;
+
   const taxId = consigneeTaxId(order);
-  if (taxId && isChinaDestination(toAddress.country)) {
+  if (taxId && toAddress.country !== "JP") {
     setup.consignee_tax_id = taxId;
   }
 
@@ -393,7 +457,14 @@ export function buildShipcoOrder(
     order: {
       to_address: toAddress,
       products: normalizedProducts,
-      setup
+      setup,
+      customs:
+        toAddress.country === "JP"
+          ? undefined
+          : {
+              duty_paid: toAddress.country === "US" && runtime.shipco.usDdp,
+              content_type: "MERCHANDISE"
+            }
     },
     warnings
   };

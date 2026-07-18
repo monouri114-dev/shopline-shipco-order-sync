@@ -107,4 +107,83 @@ describe("buildShipcoOrder", () => {
     expect(result.order.to_address.country).toBe("CN");
     expect(result.order.setup.consignee_tax_id).toBe("91310000625910362F");
   });
+
+  it("sets US orders to DDP and reflects the customer shipping carrier", () => {
+    const result = buildShipcoOrder(
+      {
+        id: "SL-US-1",
+        financial_status: "paid",
+        currency: "JPY",
+        shipping_address: {
+          name: "Alex Smith",
+          country_code: "US",
+          standard_province_code: "CA",
+          province: "California",
+          city: "Los Angeles",
+          address1: "123 Main Street",
+          zip: "90001",
+          phone: "+13105550123"
+        },
+        shipping_lines: [{ title: "DHL - EXPRESS WORLDWIDE (Shipping + Duties Incl.)", price: 4500 }],
+        line_items: [
+          {
+            name: "Original product name",
+            quantity: 1,
+            price: 3000,
+            harmonized_system_code: "9504400000"
+          }
+        ]
+      },
+      runtime
+    );
+
+    expect(result.order.setup.carrier).toBe("dhl");
+    expect(result.order.setup.shipping_fee).toBeUndefined();
+    expect(result.order.customs?.duty_paid).toBe(true);
+    expect(result.order.customs?.content_type).toBe("MERCHANDISE");
+    expect(result.order.products[0].name).toBe("Trading ca");
+    expect(result.order.products[0].hs_code).toBe("9504400000");
+    expect(result.order.products[0].hs_description).toBe("Trading cards");
+  });
+
+  it("uses 999999 as the Hong Kong postal code", () => {
+    const result = buildShipcoOrder(
+      {
+        id: "SL-HK-1",
+        financial_status: "paid",
+        shipping_address: {
+          name: "Chan Tai Man",
+          country_code: "HK",
+          city: "Hong Kong",
+          address1: "1 Queen's Road Central",
+          zip: ""
+        },
+        line_items: [{ name: "Card", quantity: 1, price: 1000 }]
+      },
+      runtime
+    );
+
+    expect(result.order.to_address.zip).toBe("999999");
+  });
+
+  it("copies VAT and tax IDs for international non-China orders", () => {
+    const result = buildShipcoOrder(
+      {
+        id: "SL-FR-1",
+        financial_status: "paid",
+        shipping_address: {
+          name: "Jean Dupont",
+          country_code: "FR",
+          city: "Paris",
+          address1: "32 Rue de Rivoli",
+          zip: "75001"
+        },
+        note_attributes: [{ name: "VAT ID", value: "FR12345678901" }],
+        line_items: [{ name: "Card", quantity: 1, price: 1000 }]
+      },
+      runtime
+    );
+
+    expect(result.order.setup.consignee_tax_id).toBe("FR12345678901");
+  });
 });

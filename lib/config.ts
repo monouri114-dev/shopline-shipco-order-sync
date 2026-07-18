@@ -39,6 +39,9 @@ export const config = {
     defaultTime: env("SHIPCO_DEFAULT_TIME"),
     defaultPackSize: optionalNumberEnv("SHIPCO_DEFAULT_PACK_SIZE"),
     defaultPackAmount: optionalNumberEnv("SHIPCO_DEFAULT_PACK_AMOUNT"),
+    defaultProductName: env("SHIPCO_DEFAULT_PRODUCT_NAME", "Trading cards (30packs)"),
+    hongKongPostalCode: env("SHIPCO_HK_POSTAL_CODE", "999999"),
+    usDdp: boolEnv("SHIPCO_US_DDP", true),
     dryRun: boolEnv("SHIPCO_DRY_RUN", false)
   },
   shopline: {

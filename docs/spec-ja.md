@@ -45,6 +45,18 @@ Shoplineのチェックアウト追加項目 `Please enter your company number /
 - 目的: 中国向け国際配送の受取人/輸入者Tax IDとして保持する。
 - ShoplineのWebhook payload上のフィールド名が多少変わっても拾えるように、`custom_attributes`、`additional_fields`、`note` などの注文データ内から該当ラベルを探索する。
 
+## 旧CSV仕様から引き継いだ項目
+
+- 香港配送は郵便番号を `999999` に固定する。
+- アメリカ配送はShopline側で関税を徴収している前提で、Ship&Co APIの `customs.duty_paid` を `true` にする。
+- 国際配送には `customs.content_type: MERCHANDISE` を付与する。
+- Shoplineの配送方法名に `DHL`、`FedEx`、`UPS`、`EMS`、`Japan Post`、`Sagawa`、`Yamato` が含まれる場合、Ship&Coの `setup.carrier` へ反映する。
+- 品目名は既定で `Trading cards (30packs)` を使用する。
+- HSコードは `line_items[].harmonized_system_code` または `line_items[].hs_code` から取得する。
+- 代表的なHSコードについては品目説明を補完する。
+- VAT ID、Tax ID、EORIなどは国際配送時に `setup.consignee_tax_id` へ反映する。
+- アメリカ配送の送料は、関税除外済みの値がある場合のみ `setup.shipping_fee` に反映する。
+
 ## 重複登録防止
 
 ShoplineのWebhookは再送される可能性があるため、同じ注文IDは一度だけShip&Coへ送る。

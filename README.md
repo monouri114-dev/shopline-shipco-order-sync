@@ -61,6 +61,15 @@ MAX_DELIVERY_NOTE_CHARS=250
 
 Shoplineのチェックアウト追加項目 `Please enter your company number / unified social` に入力された値は、中国配送時のみShip&Coの `setup.consignee_tax_id` に送信します。Ship&Co APIでは `consignee_tax_id` が受取人/輸入者のTax IDとして使われます。
 
+## 旧CSV仕様から引き継いだ項目
+
+- 香港配送は郵便番号を `999999` に固定します。
+- アメリカ配送は `customs.duty_paid=true` としてDDP扱いにします。
+- 配送方法名から `DHL`、`FedEx`、`UPS`、`EMS` などのキャリアを推定して `setup.carrier` に反映します。
+- 品目名は既定で `Trading cards (30packs)` に固定します。
+- HSコードは `harmonized_system_code` または `hs_code` から取得します。
+- VAT ID / Tax ID / EORI は国際配送時に `setup.consignee_tax_id` へ反映します。
+
 ## Ship&Coの発送元倉庫
 
 `SHIPCO_WAREHOUSE_ID` は任意です。空欄の場合、Ship&Coアプリ側で設定されているデフォルト倉庫が使われます。
