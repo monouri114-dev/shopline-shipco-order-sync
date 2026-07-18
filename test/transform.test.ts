@@ -146,6 +146,60 @@ describe("buildShipcoOrder", () => {
     expect(result.order.products[0].hs_description).toBe("Trading cards");
   });
 
+  it("uses the pure shipping fee for US orders when duties are separated", () => {
+    const result = buildShipcoOrder(
+      {
+        id: "SL-US-2",
+        financial_status: "paid",
+        currency: "JPY",
+        _pureShippingFee: 2500,
+        shipping_address: {
+          name: "Taylor Johnson",
+          country_code: "US",
+          standard_province_code: "NY",
+          province: "New York",
+          city: "New York",
+          address1: "500 Example Avenue",
+          zip: "10001"
+        },
+        shipping_lines: [{ title: "FedEx - International Priority (Shipping + Duties Incl.)", price: 4500 }],
+        line_items: [{ name: "Card", quantity: 1, price: 3000 }]
+      },
+      runtime
+    );
+
+    expect(result.order.setup.carrier).toBe("fedex");
+    expect(result.order.setup.shipping_fee).toBe(2500);
+    expect(result.order.customs?.duty_paid).toBe(true);
+  });
+
+  it("excludes PayPal and fee line items from Ship&Co products", () => {
+    const result = buildShipcoOrder(
+      {
+        id: "SL-FEE-1",
+        financial_status: "paid",
+        shipping_address: {
+          name: "Alex Smith",
+          country_code: "US",
+          standard_province_code: "CA",
+          city: "Los Angeles",
+          address1: "123 Main Street",
+          zip: "90001"
+        },
+        line_items: [
+          { name: "Trading card item", sku: "CARD-001", quantity: 1, price: 3000 },
+          { name: "PayPal Fee", sku: "PAYPAL-FEE", quantity: 1, price: 120 },
+          { name: "Handling fee", sku: "HANDLING", quantity: 1, price: 200 },
+          { name: "Payment adjustment", sku: "payment-fee", quantity: 1, price: 50 }
+        ]
+      },
+      runtime
+    );
+
+    expect(result.order.products).toHaveLength(1);
+    expect(result.order.products[0].price).toBe(3000);
+  });
+
   it("uses 999999 as the Hong Kong postal code", () => {
     const result = buildShipcoOrder(
       {

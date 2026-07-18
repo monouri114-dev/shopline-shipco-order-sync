@@ -267,9 +267,20 @@ function buildProduct(item: ShoplineLineItem, runtime: RuntimeConfig, warnings: 
   return product;
 }
 
+function isFeeLineItem(item: ShoplineLineItem) {
+  const name = normalizeText(item.title || item.name).toLowerCase();
+  const sku = normalizeText(item.sku).toLowerCase();
+
+  return (
+    /paypal|fee|handling.?fee|payment.?fee/.test(name) ||
+    /paypal|fee/.test(sku)
+  );
+}
+
 function buildProducts(order: ShoplineOrder, runtime: RuntimeConfig, warnings: TransformWarning[]) {
   const shippableItems = (order.line_items || []).filter((item) => {
     if (item.required_shipping === false || item.requires_shipping === false) return false;
+    if (isFeeLineItem(item)) return false;
     return positiveInteger(item.quantity ?? item.fulfillable_quantity, 0) > 0;
   });
 

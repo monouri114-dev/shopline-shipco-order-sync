@@ -56,6 +56,10 @@ Shoplineのチェックアウト追加項目 `Please enter your company number /
 - 代表的なHSコードについては品目説明を補完する。
 - VAT ID、Tax ID、EORIなどは国際配送時に `setup.consignee_tax_id` へ反映する。
 - アメリカ配送の送料は、関税除外済みの値がある場合のみ `setup.shipping_fee` に反映する。
+- `PayPal Fee`、`Handling fee`、`Payment fee` などの手数料明細は、Ship&Coの商品明細から除外する。
+- Shopline注文番号はShip&Coの `setup.ref_number` に反映する。
+
+旧CSV画面にあったタブUI、localStorage保存、注文番号直接指定は、自動Webhook連携では画面機能としては引き継がない。設定はVercelのEnvironment Variablesで管理し、対象注文はShoplineの支払い完了Webhookで自動的に受け取る。
 
 ## 重複登録防止
 
