@@ -45,6 +45,22 @@ export async function POST(request: Request) {
     });
   }
 
+  if (order.id === undefined || order.id === null || order.id === "") {
+    console.warn("Shopline webhook skipped: no order id was included", {
+      topic,
+      webhookId,
+      bodyKeys: Object.keys(order)
+    });
+
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason:
+        "Webhook did not include an order ID. Use SHOPLINE 'Order paid successfully' (orders/paid), not 'Order payment created' (order_transactions/create).",
+      topic
+    });
+  }
+
   const idempotencyKey = shoplineIdempotencyKey(order, webhookId);
   if (!idempotencyKey) {
     console.warn("Shopline webhook skipped: no order id was included", {
