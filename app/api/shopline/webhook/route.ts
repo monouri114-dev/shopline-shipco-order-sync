@@ -29,6 +29,12 @@ export async function POST(request: Request) {
   const order = parseShoplineOrder(rawBody);
 
   if (!isPaidOrder(order, topic)) {
+    console.info("Shopline webhook skipped: order is not paid", {
+      topic,
+      financial_status: order.financial_status,
+      pay_status: order.pay_status
+    });
+
     return NextResponse.json({
       ok: true,
       skipped: true,
@@ -40,7 +46,21 @@ export async function POST(request: Request) {
   }
 
   const idempotencyKey = shoplineIdempotencyKey(order, webhookId);
-  if (!idempotencyKey) return errorResponse(400, "Cannot determine idempotency key.");
+  if (!idempotencyKey) {
+    console.warn("Shopline webhook skipped: no order id was included", {
+      topic,
+      webhookId,
+      bodyKeys: Object.keys(order)
+    });
+
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason:
+        "Webhook did not include an order ID. Use SHOPLINE 'Order paid successfully' (orders/paid), not 'Order payment created' (order_transactions/create).",
+      topic
+    });
+  }
 
   const store = getIdempotencyStore();
   if (config.shipco.oneShot && !config.idempotency.usesDurableStore) {
@@ -52,6 +72,11 @@ export async function POST(request: Request) {
 
   const reserved = await store.reserve(idempotencyKey);
   if (!reserved) {
+    console.info("Shopline webhook skipped: duplicate order", {
+      reference: shoplineOrderReference(order),
+      idempotencyKey
+    });
+
     return NextResponse.json({
       ok: true,
       duplicate: true,
@@ -61,6 +86,10 @@ export async function POST(request: Request) {
 
   const oneShotClaim = await claimOneShotSlot(store);
   if (!oneShotClaim.allowed) {
+    console.info("Shopline webhook skipped: one-shot already consumed", {
+      reference: shoplineOrderReference(order)
+    });
+
     await store.markDone(idempotencyKey, {
       skipped: true,
       reason: "SHIPCO_ONE_SHOT has already sent one order."
@@ -77,6 +106,14 @@ export async function POST(request: Request) {
 
   try {
     const transformed = buildShipcoOrder(order);
+    console.info("Creating Ship&Co order from Shopline webhook", {
+      reference: shoplineOrderReference(order),
+      productCount: transformed.order.products.length,
+      country: transformed.order.to_address.country,
+      carrier: transformed.order.setup.carrier,
+      oneShot: oneShotClaim.enabled
+    });
+
     const shipco = await createShipcoOrder(transformed.order);
     await store.markDone(idempotencyKey, shipco);
     await completeOneShotSlot(store, oneShotClaim, {
@@ -94,6 +131,12 @@ export async function POST(request: Request) {
   } catch (error) {
     await store.release(idempotencyKey);
     await releaseOneShotSlot(store, oneShotClaim);
+    console.error("Shopline webhook failed while creating Ship&Co order", {
+      reference: shoplineOrderReference(order),
+      error: error instanceof Error ? error.message : String(error),
+      responseBody: error instanceof ShipcoApiError ? error.responseBody : undefined
+    });
+
     if (error instanceof ShipcoApiError) {
       return errorResponse(error.status, error.message, error.responseBody);
     }

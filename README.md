@@ -34,7 +34,9 @@ Vercel KV / Upstash Redis のREST URLとTokenに対応しています。
 
 ## Shopline側のWebhook
 
-ShoplineのWebhookイベントは `orders/paid` を登録します。
+ShoplineのWebhookイベントは **Order paid successfully** を登録します。Event identificationは `orders/paid` です。
+
+`Order payment created` は登録しないでください。このイベントは `order_transactions/create` で、住所・商品を含む注文本体ではなく支払い明細だけが送られます。そのためShip&Co注文作成には使いません。
 
 Webhook URL:
 

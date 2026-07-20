@@ -6,10 +6,12 @@ Shoplineで支払い完了になった注文を、CSV手動アップロードで
 
 ## 入力
 
-- Shopline Webhook: `orders/paid`
+- Shopline Webhook: `Order paid successfully` / `orders/paid`
 - Webhook URL: `/api/shopline/webhook`
 - 署名検証: `X-Shopline-Hmac-Sha256`
 - 重複判定: Shopline注文IDを優先し、無ければ `X-Shopline-Webhook-Id`
+
+`Order payment created` / `order_transactions/create` は支払い明細のWebhookであり、住所・商品を含む注文本体ではないため使用しない。
 
 ## 出力
 
