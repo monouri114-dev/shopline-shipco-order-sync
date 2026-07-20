@@ -42,7 +42,9 @@ export const config = {
     defaultProductName: env("SHIPCO_DEFAULT_PRODUCT_NAME", "Trading cards (30packs)"),
     hongKongPostalCode: env("SHIPCO_HK_POSTAL_CODE", "999999"),
     usDdp: boolEnv("SHIPCO_US_DDP", true),
-    dryRun: boolEnv("SHIPCO_DRY_RUN", false)
+    dryRun: boolEnv("SHIPCO_DRY_RUN", false),
+    oneShot: boolEnv("SHIPCO_ONE_SHOT", false),
+    oneShotKey: env("SHIPCO_ONE_SHOT_KEY", "default")
   },
   shopline: {
     appSecret: env("SHOPLINE_APP_SECRET"),

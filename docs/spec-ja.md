@@ -69,6 +69,16 @@ ShoplineのWebhookは再送される可能性があるため、同じ注文IDは
 - `KV_REST_API_URL` と `KV_REST_API_TOKEN` が無い場合はローカルメモリで動く。
 - Ship&Co APIが失敗した場合は予約状態を解除し、Shopline側の再送で再試行できる。
 
+## 1件限定の本番送信テスト
+
+本番切り替え前に、次に入った支払い済み注文を1件だけShip&Coへ送るための安全モードを用意する。
+
+- `SHIPCO_ONE_SHOT=true` の場合、最初に受け取った支払い完了WebhookだけShip&Coへ送る。
+- 1件送信後はKVに `SHIPCO_ONE_SHOT_KEY` ごとの記録を残し、後続注文はShip&Coへ送らず `skipped=true` で返す。
+- Ship&Co API送信に失敗した場合は1件枠を解除し、次のWebhookで再試行できる。
+- もう一度1件だけ送る場合は、`SHIPCO_ONE_SHOT_KEY` を別の値へ変更して再デプロイする。
+- 安全に動かすため、`SHIPCO_ONE_SHOT=true` ではUpstash Redis / Vercel KV RESTが必須。
+
 ## 手動・内部API
 
 `/api/shipco/order` は `x-internal-api-key` で保護された直接作成API。

@@ -9,6 +9,10 @@ export function getPublicRuntimeStatus() {
       ready: Boolean(config.shopline.appSecret) || config.shopline.allowUnverifiedWebhooks
     },
     { label: "Internal API key", ready: Boolean(config.internalApiKey) },
-    { label: "Idempotency store", ready: config.idempotency.usesDurableStore }
+    { label: "Idempotency store", ready: config.idempotency.usesDurableStore },
+    {
+      label: "One-shot mode",
+      ready: !config.shipco.oneShot || config.idempotency.usesDurableStore
+    }
   ];
 }

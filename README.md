@@ -75,6 +75,20 @@ Shoplineのチェックアウト追加項目 `Please enter your company number /
 
 旧CSV画面にあったタブUI、localStorage保存、注文番号直接指定は、今回の自動Webhook連携では画面機能としては使いません。設定はVercelのEnvironment Variables、注文取得はShoplineの支払い完了Webhookが担当します。
 
+## 次の1件だけShip&Coへ送るテスト
+
+本番移行前に1件だけ実注文をShip&Coへ送る場合は、VercelのEnvironment Variablesで以下を設定してRedeployします。
+
+```text
+SHIPCO_DRY_RUN=false
+SHIPCO_ONE_SHOT=true
+SHIPCO_ONE_SHOT_KEY=first-live-test-20260720
+```
+
+この状態では、次に届いたShopline支払い完了Webhookの1件だけShip&Coへ送信します。1件送信後はKVに記録され、同じ `SHIPCO_ONE_SHOT_KEY` のままでは後続注文をShip&Coへ送りません。
+
+もう一度1件だけ送る場合は、`SHIPCO_ONE_SHOT_KEY` を `second-live-test-20260720` のように別の値へ変更してRedeployします。
+
 ## Ship&Coの発送元倉庫
 
 `SHIPCO_WAREHOUSE_ID` は任意です。空欄の場合、Ship&Coアプリ側で設定されているデフォルト倉庫が使われます。

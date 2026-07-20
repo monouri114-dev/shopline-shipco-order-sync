@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { config } from "@/lib/config";
 import { getIdempotencyStore } from "@/lib/idempotency";
+import { claimOneShotSlot, completeOneShotSlot, releaseOneShotSlot } from "@/lib/one-shot";
 import { createShipcoOrder, ShipcoApiError } from "@/lib/shipco";
 import {
   assertShoplineRequest,
@@ -41,6 +43,13 @@ export async function POST(request: Request) {
   if (!idempotencyKey) return errorResponse(400, "Cannot determine idempotency key.");
 
   const store = getIdempotencyStore();
+  if (config.shipco.oneShot && !config.idempotency.usesDurableStore) {
+    return errorResponse(
+      500,
+      "SHIPCO_ONE_SHOT requires KV_REST_API_URL and KV_REST_API_TOKEN in production."
+    );
+  }
+
   const reserved = await store.reserve(idempotencyKey);
   if (!reserved) {
     return NextResponse.json({
@@ -50,19 +59,41 @@ export async function POST(request: Request) {
     });
   }
 
+  const oneShotClaim = await claimOneShotSlot(store);
+  if (!oneShotClaim.allowed) {
+    await store.markDone(idempotencyKey, {
+      skipped: true,
+      reason: "SHIPCO_ONE_SHOT has already sent one order."
+    });
+
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      one_shot: true,
+      reason: "SHIPCO_ONE_SHOT has already sent one order. This order was not sent to Ship&Co.",
+      reference: shoplineOrderReference(order)
+    });
+  }
+
   try {
     const transformed = buildShipcoOrder(order);
     const shipco = await createShipcoOrder(transformed.order);
     await store.markDone(idempotencyKey, shipco);
+    await completeOneShotSlot(store, oneShotClaim, {
+      reference: shoplineOrderReference(order),
+      shipco
+    });
 
     return NextResponse.json({
       ok: true,
       reference: shoplineOrderReference(order),
       shipco,
+      one_shot: oneShotClaim.enabled ? { consumed: true } : undefined,
       warnings: transformed.warnings
     });
   } catch (error) {
     await store.release(idempotencyKey);
+    await releaseOneShotSlot(store, oneShotClaim);
     if (error instanceof ShipcoApiError) {
       return errorResponse(error.status, error.message, error.responseBody);
     }
